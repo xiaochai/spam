@@ -1,3 +1,5 @@
 account:
-  user_name: xxx
+  user_name: xxx@xxx
   password: xxx
+  cookie_file: ./src/config/login_cookies.txt
+  resp_file: ./src/config/login_resp.txt
