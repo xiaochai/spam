@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::{fmt, fs, io};
+use std::{env, fmt, fs, io};
 use std::fmt::{Debug, Display, Formatter};
 use std::io::{Read, Split, Write};
 use std::ops::{Add, Sub};
@@ -20,8 +20,26 @@ lazy_static::lazy_static! {
     static ref HTTP_CLIENT: reqwest::blocking::Client = reqwest::blocking::Client::new();
 }
 
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 根据参数创建任务
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 3 {
+        return Err(anyhow!("args length is less than 3"))?;
+    }
+    let query = args.get(1).unwrap();
+    let query_date = args.get(2).unwrap();
+    let mut job_list = vec![(query_date.to_string(), query.to_string())];
+    if query == "--file" {
+        job_list.clear();
+        for i in fs::read_to_string(query_date)?.split("\n") {
+            let line: Vec<&str> = i.split(" ").collect();
+            if line.len() != 2 {
+                continue;
+            }
+            job_list.push((line.get(0).unwrap().to_string(), line.get(1).unwrap().to_string()));
+        }
+    }
+
     // 获取配置内容
     let c = load_application_config()?;
     // 解析配置
@@ -41,14 +59,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 登录
     login(user_name, passport, cookie_file, resp_file)?;
 
+    for (q_d, q) in job_list {
+        println!("----run job begin {:?}, {:?}", q_d, q);
+        match run_job(cookie_file, q.as_str(), q_d.as_str()) {
+            Ok(s) => { println!("----- run job success") }
+            Err(e) => { println!("----- run job error:{:?}", e) }
+        }
+    }
+
+    Ok(())
+}
+
+fn run_job(cookie_file: &str, query: &str, query_date: &str) -> anyhow::Result<String> {
     // 获取航班信息
-    let flight = get_flight_by_query_date(cookie_file, "zh9114", "2024-8-30")?;
+    let flight = get_flight_by_query_date(cookie_file, query, query_date)?;
     println!("find flight{:?}", flight);
 
     // 下载文件
     let kml_file = download(cookie_file, &flight)?;
     println!("get kml file:{:?}", kml_file);
-    Ok(())
+    Ok(kml_file)
 }
 
 fn download(cookie_file: &str, flight: &Flight) -> anyhow::Result<String> {
@@ -58,7 +88,7 @@ fn download(cookie_file: &str, flight: &Flight) -> anyhow::Result<String> {
         .with_timezone(&Local)
         .format("%Y_%m_%d").to_string();
     // 确定文件名
-    let file_name = "./src/config/flight_kml_".to_string() + flight.number.as_str() + "_" + datetime.as_str() + ".kml";
+    let file_name = "./data/kml/flight_kml_".to_string() + flight.number.as_str() + "_" + datetime.as_str() + ".kml";
     // 文件是否已经存在
     match fs::metadata(&file_name) {
         Ok(meta) => return Ok(file_name),
@@ -99,7 +129,7 @@ fn get_flight_by_query_date(cookie_file: &str, query: &str, date: &str) -> anyho
         // 如果是60天之前的日期，则不再拉取之前的数据，直接使用最新的
         query_date = 0;
     }
-    println!("get_flight_by_query_date query:{:?}, date:{:?}", query, query_date);
+    println!("  get_flight_by_query_date: query:{:?}, date:{:?}", query, query_date);
 
     let list = get_flight_list(query, token.as_str())?;
     let res: Value = serde_json::from_str(list.as_str())?;
@@ -107,7 +137,7 @@ fn get_flight_by_query_date(cookie_file: &str, query: &str, date: &str) -> anyho
         let flight = match get_flight_each_data(i) {
             Ok(f) => f,
             Err(e) => {
-                println!("get flight but not ok:{:?}, skip...", e.to_string());
+                // println!("get flight but not ok:{:?}, skip...", e.to_string());
                 continue;
             }
         };
@@ -132,7 +162,7 @@ fn get_flight_list_real_data(v: &Value) -> anyhow::Result<&Vec<Value>> {
         .get("response").ok_or(anyhow!("flight response is empty"))?
         .as_object().ok_or(anyhow!("flight response is not obj"))?
         .get("data").ok_or(anyhow!("flight data is empty"))?
-        .as_array().ok_or(anyhow!("flight result is not array"))?;
+        .as_array().ok_or(anyhow!("flight data is not array"))?;
     Ok(arr)
 }
 
@@ -176,13 +206,17 @@ fn get_flight_each_data(v: &Value) -> anyhow::Result<Flight> {
 
 /// 请求远程获取航班列表
 fn get_flight_list(query: &str, token: &str) -> anyhow::Result<String> {
-    let file_name = "./src/config/flight_".to_string() + query + "_" + Local::now().format("%Y_%m_%d").to_string().as_str();
+    let today_date = Local::now().format("%Y_%m_%d").to_string();
+    let file_name = "./data/flight_list/".to_string()+&today_date+"/flight_" + query + "_" + &today_date;
     match fs::read_to_string(&file_name) {
         Ok(body) => return Ok(body),
         Err(e) => println!("get flight list from file:{:?} failed:{:?}", file_name, e),
     };
 
-    let url = "https://api.flightradar24.com/common/v1/flight/list.json?query=".to_string() + query + "&fetchBy=flight&limit=100&token=" + token;
+    // 创建目录
+    fs::create_dir_all(std::path::Path::new(&file_name).parent().unwrap())?;
+
+        let url = "https://api.flightradar24.com/common/v1/flight/list.json?query=".to_string() + query + "&fetchBy=flight&limit=100&token=" + token;
     let resp = HTTP_CLIENT.get(url).send()?;
     let body = resp.text()?;
 
@@ -227,11 +261,11 @@ fn record_file_valid(f: &str) -> bool {
 fn login(user_name: &str, passport: &str, cookie_file_name: &str, response_file_name: &str) -> anyhow::Result<()> {
     // 检查文件合法性，确认是否需要重新登录
     if record_file_valid(cookie_file_name) && record_file_valid(response_file_name) {
-        println!("file exist, skip login");
+        println!("login: file exist, skip login");
         return Ok(());
     }
     let (code, body, cookie) = login_request(user_name, passport)?;
-    println!("login get cookie:{:?}， resp:{:?}", cookie, body);
+    println!("login: get cookie:{:?}， resp:{:?}", cookie, body);
 
     File::create(cookie_file_name)?.write_all(cookie.as_ref())?;
     File::create(response_file_name)?.write_all(body.as_ref())?;
