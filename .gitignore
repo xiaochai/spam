@@ -722,3 +722,5 @@
 /beijing_park_list/target/.rustc_info.json
 /beijing_park_list/target/CACHEDIR.TAG
 /flight_radar_24/src/config/application.yml
+/fog_of_world/target/
+/beijing_park_list/target/
