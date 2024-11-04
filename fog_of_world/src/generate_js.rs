@@ -6,18 +6,19 @@ use std::ptr::copy;
 use std::thread::sleep;
 use std::time::Duration;
 use lazy_static::lazy_static;
-use fog_of_world::coordinate::Coordinate;
-use fog_of_world::coor_trans::{mercator_rec_2_lon, file_name_to_map_bound};
+use crate::coordinate::Coordinate;
+use crate::coor_trans::{mercator_rec_2_lon, file_name_to_map_bound};
 use io::Read;
 use std::io::Write;
 use serde::{Deserialize, Serialize};
-use fog_of_world::{amap_api, file_analyze};
+use crate::{amap_api, file_analyze};
 
 #[derive(Serialize, Deserialize)]
 pub struct SmallPic {
     pub west_north:Vec<f64>,
     pub east_south:Vec<f64>,
     pub data:Vec<usize>,
+    pub thumb:Vec<usize>,
 }
 
 #[derive(Serialize, Deserialize)]

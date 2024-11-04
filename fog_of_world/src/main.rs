@@ -16,52 +16,64 @@ use fog_of_world::{amap_api, file_analyze, generate_js};
 #[show_image::main]
 fn main() {
     let mut points:Vec<generate_js::AllPoints> = vec![];
+    let fwss_files = vec![
+        ("xiaochai", "snapshots/xiaochai/Snapshot-20241101T213106 0800.fwss", "#08f"),
+        ("ox00", "snapshots/ox00/Snapshot-20241104T163651+0800.fwss", "green"),
+    ];
 
-    let file_name="snapshots/xiaochai/Snapshot-20241101T213106 0800.fwss";
-    let mut z = zip::ZipArchive::new(File::open(file_name).unwrap()).unwrap();
-    let mut each = generate_js::AllPoints{
-        name: "xiaochai".to_string(),
-        points: vec![],
-        color: "red".to_string(),
-    };
-
-    for i in 0..z.len(){
-        let f = z.by_index(i).unwrap();
-        if !f.name().starts_with("Model/*/") || !f.is_file(){
-            continue
-        }
-
-        let (p1,p2) = file_name_to_map_bound(&f.name()[8..]);
-        let converts = amap_api::convert_coordinate(vec![&p1,&p2]).unwrap();
-        // println!("{:?}", converts);
-
-
-        let mut decoder = libflate::zlib::Decoder::new(f).unwrap();
-        let mut res = Vec::new();
-        decoder.read_to_end(&mut res).unwrap();
-        let image_v = file_analyze::get_full_stream(&res);
-
-       let data = image_v.iter().enumerate()
-            .filter(|(x, y)| **y == file_analyze::WHITE)
-            .map(|(x, y)| x)
-            .collect::<Vec<usize>>();
-
-        let cp1 = converts.get(0).unwrap().as_ref().unwrap();
-        let cp2 = converts.get(1).unwrap().as_ref().unwrap();
-        let sp = generate_js::SmallPic{
-            west_north:vec![cp1.lon, cp1.lng],
-            east_south: vec![cp2.lon, cp2.lng],
-            data,
+    fwss_files.iter().for_each(|(name, file_name, color)|{
+        let mut z = zip::ZipArchive::new(File::open(file_name).unwrap()).unwrap();
+        let mut each = generate_js::AllPoints{
+            name: name.to_string(),
+            points: vec![],
+            color: color.to_string(),
         };
+        println!("{:?}, file_len:{:?}", name, z.len());
 
-        each.points.push(sp);
+        for i in 0..z.len(){
+            let f = z.by_index(i).unwrap();
+            if !f.name().starts_with("Model/*/") || !f.is_file(){
+                continue
+            }
 
-        let image_width = (file_analyze::THUMB_WIDTH_HEIGHT * file_analyze::SMALL_PIC_WIDTH_HEIGHT) as u32;
-        file_analyze::image_show(image_width, image_width, image_v);
-        sleep(Duration::from_secs(5));
+            let (p1,p2) = file_name_to_map_bound(&f.name()[8..]);
+            let converts = amap_api::convert_coordinate(vec![&p1,&p2]).unwrap();
+            // println!("{:?}", converts);
 
-    }
-    points.push(each);
+            let mut decoder = libflate::zlib::Decoder::new(f).unwrap();
+            let mut res = Vec::new();
+            decoder.read_to_end(&mut res).unwrap();
+            let image_v = file_analyze::get_full_stream(&res);
+
+            let data = image_v.iter().enumerate()
+                .filter(|(x, y)| **y == file_analyze::WHITE)
+                .map(|(x, y)| x)
+                .collect::<Vec<usize>>();
+            let thumb = file_analyze::get_thumb_stream(&res).iter().enumerate()
+                .filter(|(x,y)| **y == file_analyze::WHITE)
+                .map(|(x,y)|x)
+                .collect::<Vec<usize>>();
+
+            let cp1 = converts.get(0).unwrap().as_ref().unwrap();
+            let cp2 = converts.get(1).unwrap().as_ref().unwrap();
+            println!("get small pic for {:?}, thumb_len:{:?}, small_pic:{:?}", name, data.len(), thumb.len());
+            let sp = generate_js::SmallPic{
+                west_north:vec![cp1.lon, cp1.lng],
+                east_south: vec![cp2.lon, cp2.lng],
+                data,
+                thumb,
+            };
+
+            each.points.push(sp);
+
+            // let image_width = (file_analyze::THUMB_WIDTH_HEIGHT * file_analyze::SMALL_PIC_WIDTH_HEIGHT) as u32;
+            // file_analyze::image_show(image_width, image_width, image_v);
+            // sleep(Duration::from_secs(5));
+
+        }
+        points.push(each);
+    });
+
     generate_js::write_2_js_file(points, "./assets/js/data.js").unwrap();
     return;
 
