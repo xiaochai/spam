@@ -103,6 +103,23 @@ pub fn get_full_stream(c: &Vec<u8>) -> Vec<u8> {
     );
     res
 }
+/// get_full_stream中的点的索引集合
+pub fn get_full_stream_index(c: &Vec<u8>) -> Vec<usize> {
+    let mut res = vec![];
+    get_thumb_indicate(&c).iter().enumerate().filter(|(_,x)| **x > 0).for_each(
+        |(i,x)| {
+            get_small_pic_with_pos(c, *x).iter().enumerate().filter(|(_,x)| **x > 0).for_each(
+                |(ii, xx)|{
+                    let col = (i % THUMB_WIDTH_HEIGHT)*SMALL_PIC_WIDTH_HEIGHT+ii%SMALL_PIC_WIDTH_HEIGHT;
+                    let row = (i/THUMB_WIDTH_HEIGHT)*SMALL_PIC_WIDTH_HEIGHT+ii/SMALL_PIC_WIDTH_HEIGHT;
+                    res.push(row*THUMB_WIDTH_HEIGHT*SMALL_PIC_WIDTH_HEIGHT+col);
+                }
+            )
+        }
+    );
+    res
+}
+
 
 pub fn test(file_name: &str) {
 

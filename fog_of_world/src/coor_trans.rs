@@ -63,6 +63,6 @@ pub fn file_name_to_map_bound(name: &str) -> (Coordinate, Coordinate) {
     let y = PI - 2f64 * PI / 512f64 * (row as f64);
     let x_1 = 2f64 * PI / 512f64 * ((col + 1) as f64) - PI;
     let y_1 = PI - 2f64 * PI / 512f64 * ((row + 1) as f64);
-    println!("{:?},{:?}, {:?}", x_1-x, y_1-y, 2f64 * PI / 512f64);
+    // println!("{:?},{:?}, {:?}", x_1-x, y_1-y, 2f64 * PI / 512f64);
     (mercator_rec_2_lon(x, y), mercator_rec_2_lon(x_1, y_1))
 }
